@@ -3,14 +3,18 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+
+	"github.com/docopt/docopt-go"
 )
 
 // A result is the product of reading and summing a file using MD5.
@@ -92,13 +96,74 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 	return m, nil
 }
 
+func WriteToFile(filename string, data string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = io.WriteString(file, data)
+	if err != nil {
+		return err
+	}
+	return file.Sync()
+}
+
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+var arguments docopt.Opts
+
 func main() {
+
+	var usage = `Usage: md5folder [DIR] [-hms]
+
+	Arguments:
+	  DIR        dir to process
+	
+	Options:
+	  -h      help
+	  -m      md5
+	  -s      stat
+
+	`
+
+	arguments, _ = docopt.ParseDoc(usage)
+	//fmt.Println(arguments)
+	if arguments["-m"].(bool) {
+		fmt.Println("calc md5")
+		calcMd5()
+	} else if arguments["-s"].(bool) {
+		fmt.Println("calc stats")
+	} else {
+		fmt.Println("no args provided. use -h for help")
+	}
+
+}
+
+func calcMd5() {
+	md5ListFile := os.Args[1] + string(filepath.Separator) + ".md5list"
+
+	if fileExists(md5ListFile) {
+		fmt.Println(".md5list files exists. This directory already processed. Exiting.")
+		return
+	}
 
 	//fmt.Println("length", len(os.Args))
 	if len(os.Args) <= 1 {
 		fmt.Println("Requires path as paramater")
-		return		
+		return
 	}
+
+	var buffer bytes.Buffer
+
+	buffer.WriteString(fmt.Sprintf("md5 hash of directory contents v1.0\n"))
 
 	// Calculate the MD5 sum of all files under the specified directory,
 	// then print the results sorted by path name.
@@ -113,6 +178,17 @@ func main() {
 	}
 	sort.Strings(paths)
 	for _, path := range paths {
-		fmt.Printf("%x  %s\n", m[path], path)
+		//ignore hidden files
+		if string(path[0]) != "." {
+			line := fmt.Sprintf("%x  %s\n", m[path], path)
+			fmt.Printf(line)
+			buffer.WriteString(line)
+		}
 	}
+
+	err = WriteToFile(md5ListFile, buffer.String())
+	if err != nil {
+		fmt.Println(err)
+	}
+
 }
