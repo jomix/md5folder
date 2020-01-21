@@ -137,12 +137,68 @@ func main() {
 	arguments, _ = docopt.ParseDoc(usage)
 	//fmt.Println(arguments)
 	if arguments["-m"].(bool) {
-		fmt.Println("calc md5")
+		//fmt.Println("calc md5")
 		calcMd5()
 	} else if arguments["-s"].(bool) {
-		fmt.Println("calc stats")
+		//fmt.Println("calc stats")
+		statFiles()
 	} else {
 		fmt.Println("no args provided. use -h for help")
+	}
+
+}
+
+func statFiles() {
+	statListFile := os.Args[1] + string(filepath.Separator) + ".statList"
+
+	//if fileExists(statListFile) {
+	//	fmt.Println(".statList files exists. This directory already processed. Exiting.")
+	//	return
+	//}
+
+	//fmt.Println("length", len(os.Args))
+	if len(os.Args) <= 1 {
+		fmt.Println("Requires path as paramater")
+		return
+	}
+
+	var buffer bytes.Buffer
+
+	buffer.WriteString(fmt.Sprintf("stat of directory contents v1.0\n"))
+
+	m := make(map[string]int64)
+	err := filepath.Walk(".",
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && string(path[0]) != "." {
+				//fmt.Println(path, info.Size())
+				m[path] = info.Size()
+			}
+			return nil
+		})
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	var paths []string
+	for path := range m {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		//ignore hidden files
+		if string(path[0]) != "." {
+			line := fmt.Sprintf("%s  %d\n", path, m[path])
+			fmt.Printf(line)
+			buffer.WriteString(line)
+		}
+	}
+
+	err = WriteToFile(statListFile, buffer.String())
+	if err != nil {
+		fmt.Println(err)
 	}
 
 }
